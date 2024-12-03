@@ -24,6 +24,7 @@
 
 // deal.II
 #include <deal.II/base/conditional_ostream.h>
+#include <deal.II/base/cuda.h>
 #include <deal.II/base/revision.h>
 #include <deal.II/base/utilities.h>
 #include <deal.II/distributed/tria_base.h>
@@ -31,6 +32,10 @@
 // ExaDG
 #include <exadg/grid/grid.h>
 #include <exadg/utilities/print_functions.h>
+
+// cuda
+#include <cuda_runtime.h>
+#include <helper_cuda.h>
 
 namespace ExaDG
 {
@@ -59,6 +64,37 @@ print_MPI_info(dealii::ConditionalOStream const & pcout, MPI_Comm const & mpi_co
 {
   pcout << std::endl << "MPI info:" << std::endl << std::endl;
   print_parameter(pcout, "Number of processes", dealii::Utilities::MPI::n_mpi_processes(mpi_comm));
+}
+
+// print CUDA info
+inline void
+print_CUDA_info(dealii::ConditionalOStream const & pcout)
+{
+  int            devID;
+  int            driverVersion;
+  int            runtimeVersion;
+  cudaDeviceProp deviceProp;
+
+  AssertCuda(cudaGetDevice(&devID));
+  AssertCuda(cudaGetDeviceProperties(&deviceProp, devID));
+
+  AssertCuda(cudaDriverGetVersion(&driverVersion));
+  AssertCuda(cudaRuntimeGetVersion(&runtimeVersion));
+
+  // clang-format off
+  pcout << std::endl
+        << "CUDA info:" << std::endl
+        << std::endl
+        << "  Device " << devID << ": " << deviceProp.name 
+        << std::endl
+        << "  CUDA Driver Version / Runtime Version = "
+        << driverVersion / 1000 << "." << (driverVersion % 100) / 10 << " / "
+        << runtimeVersion / 1000 << "." << (runtimeVersion % 100) / 10
+        << std::endl
+        << "  CUDA Capability Major/Minor version number = "
+        << deviceProp.major << "." << deviceProp.minor
+        << std::endl;
+  // clang-format on
 }
 
 template<typename Number>
@@ -146,6 +182,8 @@ print_general_info(dealii::ConditionalOStream const & pcout,
   }
 
   print_MPI_info(pcout, mpi_comm);
+
+  print_CUDA_info(pcout);
 }
 
 } // namespace ExaDG

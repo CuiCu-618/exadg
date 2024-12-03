@@ -52,6 +52,18 @@ IF(NOT DEAL_II_WITH_P4EST)
     )
 ENDIF()
 
+# CUDA
+IF(NOT DEAL_II_WITH_CUDA)
+  MESSAGE(FATAL_ERROR
+    "\nExaDG requires a deal.II installation built with support for CUDA but it appears to be missing!\n"
+    )
+ENDIF()
+
+IF(DEAL_II_WITH_CUDA)
+  enable_language(CUDA)
+  INCLUDE_DIRECTORIES(/export/home/cucui/SimServ06/cuda-samples/Common/)
+ENDIF()
+
 DEAL_II_INITIALIZE_CACHED_VARIABLES()
 
 # Set the source files to be compiled
