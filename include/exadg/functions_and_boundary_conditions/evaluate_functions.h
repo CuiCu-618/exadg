@@ -151,8 +151,8 @@ struct FunctionEvaluator<1, dim, Number>
       for(unsigned int v = 0; v < dealii::VectorizedArray<Number>::size(); ++v)
       {
         dealii::Point<dim> q_point;
-        for(unsigned int d = 0; d < dim; ++d)
-          q_point[d] = q_points[d][v];
+        for(unsigned int i = 0; i < dim; ++i)
+          q_point[i] = q_points[i][v];
 
         function->set_time(time);
         array[v] = function->value(q_point, d);
@@ -208,10 +208,10 @@ struct FunctionEvaluator<1, dim, Number>
       {
         dealii::Point<dim>     q_point;
         dealii::Tensor<1, dim> normal;
-        for(unsigned int d = 0; d < dim; ++d)
+        for(unsigned int i = 0; i < dim; ++i)
         {
-          q_point[d] = q_points[d][v];
-          normal[d]  = normals[d][v];
+          q_point[i] = q_points[i][v];
+          normal[i]  = normals[i][v];
         }
         function_with_normal->set_time(time);
         function_with_normal->set_normal_vector(normal);
