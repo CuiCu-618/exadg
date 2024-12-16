@@ -98,7 +98,8 @@ print_CUDA_info(dealii::ConditionalOStream const & pcout)
 }
 
 template<typename Number>
-inline std::string get_type(Number)
+inline std::string
+get_type(Number)
 {
   return "unknown type";
 }
@@ -115,6 +116,20 @@ get_type(double)
   return "double";
 }
 
+
+// print Time info
+inline void
+print_Time_info(dealii::ConditionalOStream const & pcout)
+{
+  // clang-format off
+  pcout << std::endl
+        << "Time info:" << std::endl
+        << std::endl
+        << "  Date: " << dealii::Utilities::System::get_date() << std::endl
+        << "  Time: " << dealii::Utilities::System::get_time()  
+        << std::endl;
+  // clang-format on
+}
 
 // print deal.II info
 inline void
@@ -177,6 +192,7 @@ print_general_info(dealii::ConditionalOStream const & pcout,
 
   if(not(is_test))
   {
+    print_Time_info(pcout);
     print_dealii_info(pcout);
     print_matrixfree_info<Number>(pcout);
   }
