@@ -316,6 +316,7 @@ public:
    * functions. If you just want to initialize a (parallel) vector, you should
    * usually prefer this data structure as the data exchange information can
    * be reused from one vector to another.
+   * TODO: several DoFHandler objects
    */
   const std::shared_ptr<const dealii::Utilities::MPI::Partitioner> &
   get_vector_partitioner() const;

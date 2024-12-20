@@ -51,7 +51,7 @@ enum_to_string(OperatorType const enum_type)
 
   switch(enum_type)
   {
-    // clang-format off
+      // clang-format off
     case OperatorType::MatrixFree:  string_type = "MatrixFree";  break;
     case OperatorType::MatrixBased: string_type = "MatrixBased"; break;
     default: AssertThrow(false, dealii::ExcMessage("Not implemented.")); break;
@@ -115,6 +115,9 @@ public:
 
   void
   solve();
+
+  void
+  solve_device();
 
   SolverResult
   print_performance_results(double const total_time) const;

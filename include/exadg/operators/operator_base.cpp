@@ -443,7 +443,8 @@ OperatorBase<dim, Number, n_components>::add_diagonal(VectorType & diagonal) con
       compute_diagonal<dim, -1, 0, n_components, Number, dealii::VectorizedArray<Number>>(
         *matrix_free,
         diagonal,
-        [&](auto & integrator) -> void {
+        [&](auto & integrator) -> void
+        {
           // TODO this line is currently needed as bugfix, but should be
           // removed because reinit is now done twice
           this->reinit_cell(integrator.get_current_cell_index());

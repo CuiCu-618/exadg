@@ -53,6 +53,33 @@ public:
   }
 };
 
+namespace CUDAWrappers
+{
+template<typename value_type>
+class PreconditionerBase
+{
+public:
+  typedef dealii::LinearAlgebra::distributed::Vector<value_type, dealii::MemorySpace::CUDA>
+    VectorType;
+
+  virtual ~PreconditionerBase()
+  {
+  }
+
+  virtual void
+  vmult(VectorType & dst, VectorType const & src) const = 0;
+
+  virtual void
+  update() = 0;
+
+  virtual std::shared_ptr<TimerTree>
+  get_timings() const
+  {
+    return std::make_shared<TimerTree>();
+  }
+};
+
+} // namespace CUDAWrappers
 } // namespace ExaDG
 
 

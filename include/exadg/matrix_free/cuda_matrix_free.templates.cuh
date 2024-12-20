@@ -772,7 +772,7 @@ MatrixFree<dim, Number>::internal_reinit(
   this->overlap_communication_computation = additional_data.overlap_communication_computation;
   this->mg_level                          = additional_data.mg_level;
 
-  this->overlap_communication_computation = false;
+  // this->overlap_communication_computation = false;
 
   this->geometry_type = dealii::internal::MatrixFreeFunctions::GeometryType::general;
 
@@ -908,7 +908,8 @@ MatrixFree<dim, Number>::internal_reinit(
       std::vector<bool> ghost_vertices(dof_handler->get_triangulation().n_vertices(), false);
 
       for(auto cell = beginc; cell != endc; ++cell)
-        if(cell->is_ghost())
+        if((mg_level == dealii::numbers::invalid_unsigned_int && cell->is_ghost()) ||
+           (mg_level != dealii::numbers::invalid_unsigned_int && cell->is_ghost_on_level()))
           for(unsigned int i = 0; i < dealii::GeometryInfo<dim>::vertices_per_cell; i++)
             ghost_vertices[cell->vertex_index(i)] = true;
 

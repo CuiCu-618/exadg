@@ -30,7 +30,7 @@ namespace ExaDG
  * (`MPI_COMM_TYPE_SHARED`). The second argument returns the number of
  * processes per node, in case it is needed in the algorithm.
  */
-std::tuple<bool, unsigned int>
+inline std::tuple<bool, unsigned int>
 identify_first_process_on_node(MPI_Comm const & mpi_comm)
 {
   int rank;

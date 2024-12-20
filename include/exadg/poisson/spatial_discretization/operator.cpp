@@ -386,8 +386,16 @@ Operator<dim, n_components, Number>::rhs(VectorType & dst, double const time) co
   laplace_operator.set_time(time);
   laplace_operator.rhs_add(dst);
 
+  std::cout << "\nRHS: " << dst.l2_norm() << "\n";
+
   if(param.right_hand_side)
     rhs_operator.evaluate_add(dst, time);
+
+  std::cout << "\nRHS: " << dst.l2_norm() << "\n";
+
+  auto tmp = dst;
+  laplace_operator.vmult(tmp, dst);
+  std::cout << "\nRHS vmult: " << tmp.l2_norm() << "\n";
 }
 
 template<int dim, int n_components, typename Number>
@@ -527,9 +535,8 @@ Operator<dim, n_components, Number>::vmult_matrix_based(
                         src,
                         system_matrix.get_mpi_communicator(),
                         [&](dealii::PETScWrappers::VectorBase &       petsc_dst,
-                            dealii::PETScWrappers::VectorBase const & petsc_src) {
-                          system_matrix.vmult(petsc_dst, petsc_src);
-                        });
+                            dealii::PETScWrappers::VectorBase const & petsc_src)
+                        { system_matrix.vmult(petsc_dst, petsc_src); });
 }
 #endif
 

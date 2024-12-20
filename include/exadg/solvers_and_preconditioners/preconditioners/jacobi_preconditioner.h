@@ -70,6 +70,51 @@ private:
   VectorType inverse_diagonal;
 };
 
+namespace CUDAWrappers
+{
+template<typename Operator>
+class JacobiPreconditioner : public CUDAWrappers::PreconditionerBase<typename Operator::value_type>
+{
+public:
+  typedef
+    typename CUDAWrappers::PreconditionerBase<typename Operator::value_type>::VectorType VectorType;
+
+  JacobiPreconditioner(Operator const & underlying_operator_in)
+    : underlying_operator(underlying_operator_in)
+  {
+    underlying_operator.initialize_dof_vector(inverse_diagonal);
+
+    underlying_operator.calculate_inverse_diagonal(inverse_diagonal);
+  }
+
+  void
+  vmult(VectorType & dst, VectorType const & src) const
+  {
+    if(!dealii::PointerComparison::equal(&dst, &src))
+      dst = src;
+    dst.scale(inverse_diagonal);
+  }
+
+  void
+  update()
+  {
+    underlying_operator.calculate_inverse_diagonal(inverse_diagonal);
+  }
+
+  unsigned int
+  get_size_of_diagonal()
+  {
+    return inverse_diagonal.size();
+  }
+
+private:
+  Operator const & underlying_operator;
+
+  VectorType inverse_diagonal;
+};
+
+} // namespace CUDAWrappers
+
 } // namespace ExaDG
 
 

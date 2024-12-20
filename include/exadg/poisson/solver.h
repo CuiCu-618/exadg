@@ -83,6 +83,8 @@ run(std::vector<SolverResult> & results,
 
   driver->solve();
 
+  driver->solve_device();
+
   SolverResult result = driver->print_performance_results(timer.wall_time());
   results.push_back(result);
 }

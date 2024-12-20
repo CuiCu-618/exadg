@@ -30,7 +30,7 @@
 #include <deal.II/numerics/vector_tools.h>
 
 // ExaDG
-#include <exadg/poisson/preconditioners/multigrid_preconditioner.h>
+#include <exadg/poisson/preconditioners/cuda_multigrid_preconditioner.h>
 #include <exadg/poisson/spatial_discretization/cuda_operator.h>
 #include <exadg/solvers_and_preconditioners/preconditioners/block_jacobi_preconditioner.h>
 #include <exadg/solvers_and_preconditioners/preconditioners/inverse_mass_preconditioner.h>
@@ -239,23 +239,24 @@ Operator<dim, n_components, Number>::setup_solver()
 {
   pcout << std::endl << "Setup Poisson solver on device ..." << std::endl;
 
-  /*
   // TODO:
   // initialize preconditioner
   if(param.preconditioner == Poisson::Preconditioner::PointJacobi)
   {
-    preconditioner = std::make_shared<JacobiPreconditioner<Laplace>>(laplace_operator);
+    preconditioner =
+      std::make_shared<ExaDG::CUDAWrappers::JacobiPreconditioner<Laplace>>(laplace_operator);
   }
-  else if(param.preconditioner == Poisson::Preconditioner::BlockJacobi)
-  {
-    preconditioner = std::make_shared<BlockJacobiPreconditioner<Laplace>>(laplace_operator);
-  }
+  // else if(param.preconditioner == Poisson::Preconditioner::BlockJacobi)
+  // {
+  //   preconditioner = std::make_shared<BlockJacobiPreconditioner<Laplace>>(laplace_operator);
+  // }
   else if(param.preconditioner == Poisson::Preconditioner::Multigrid)
   {
     MultigridData mg_data;
     mg_data = param.multigrid_data;
 
-    typedef MultigridPreconditioner<dim, Number, n_components> Multigrid;
+    typedef ExaDG::CUDAWrappers::Poisson::MultigridPreconditioner<dim, Number, n_components>
+      Multigrid;
 
     preconditioner = std::make_shared<Multigrid>(this->mpi_comm);
 
@@ -285,6 +286,9 @@ Operator<dim, n_components, Number>::setup_solver()
                                   false, // moving_mesh
                                   dirichlet_boundary_conditions,
                                   grid->periodic_faces);
+
+    // preconditioner =
+    //   std::make_shared<ExaDG::CUDAWrappers::JacobiPreconditioner<Laplace>>(laplace_operator);
   }
   else
   {
@@ -294,7 +298,6 @@ Operator<dim, n_components, Number>::setup_solver()
                   param.preconditioner == Poisson::Preconditioner::Multigrid,
                 dealii::ExcMessage("Specified preconditioner is not implemented!"));
   }
-  */
 
 
   if(param.solver == Poisson::Solver::CG)

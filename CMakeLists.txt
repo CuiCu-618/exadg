@@ -83,12 +83,16 @@ SET(TARGET_SRC
      include/exadg/solvers_and_preconditioners/preconditioners/enum_types.cpp
      include/exadg/solvers_and_preconditioners/solvers/enum_types.cpp
      include/exadg/solvers_and_preconditioners/multigrid/multigrid_preconditioner_base.cpp
+     include/exadg/solvers_and_preconditioners/multigrid/cuda_multigrid_preconditioner_base.cu
      include/exadg/solvers_and_preconditioners/multigrid/multigrid_parameters.cpp
      include/exadg/solvers_and_preconditioners/multigrid/transfers/mg_transfer_p.cpp
      include/exadg/solvers_and_preconditioners/multigrid/transfers/mg_transfer_c.cpp
      include/exadg/solvers_and_preconditioners/multigrid/transfers/mg_transfer_h.cpp
+     include/exadg/solvers_and_preconditioners/multigrid/transfers/cuda_mg_transfer_h.cu
+     include/exadg/solvers_and_preconditioners/multigrid/transfers/cuda_vector.cu
      include/exadg/solvers_and_preconditioners/multigrid/transfers/mg_transfer_global_coarsening.cpp
      include/exadg/solvers_and_preconditioners/multigrid/transfers/mg_transfer_global_refinement.cpp
+     include/exadg/solvers_and_preconditioners/multigrid/transfers/cuda_mg_transfer_global_refinement.cu
      include/exadg/postprocessor/error_calculation.cpp
      include/exadg/postprocessor/mean_scalar_calculation.cpp
      include/exadg/postprocessor/lift_and_drag_calculation.cpp
@@ -103,11 +107,13 @@ SET(TARGET_SRC
      include/exadg/poisson/user_interface/enum_types.cpp
      include/exadg/poisson/user_interface/parameters.cpp
      include/exadg/poisson/spatial_discretization/operator.cpp
+     include/exadg/poisson/spatial_discretization/cuda_operator.cu
      include/exadg/poisson/spatial_discretization/laplace_operator.cpp
      include/exadg/poisson/preconditioners/multigrid_preconditioner.cpp
+     include/exadg/poisson/preconditioners/cuda_multigrid_preconditioner.cu
      include/exadg/poisson/postprocessor/postprocessor.cpp
-     include/exadg/poisson/driver.cpp
-     include/exadg/poisson/overset_grids/driver.cpp
+     include/exadg/poisson/driver.cu
+     # include/exadg/poisson/overset_grids/driver.cpp
      # convection-diffusion equation
      include/exadg/convection_diffusion/user_interface/enum_types.cpp
      include/exadg/convection_diffusion/user_interface/parameters.cpp

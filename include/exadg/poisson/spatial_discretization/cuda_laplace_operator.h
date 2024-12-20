@@ -145,6 +145,27 @@ struct LaplaceOperatorData : public OperatorBaseData
   std::shared_ptr<BoundaryDescriptor<rank, dim> const> bc;
 };
 
+#define BKSIZE_ELEMWISE_OP 512
+#define CHUNKSIZE_ELEMWISE_OP 8
+
+namespace internal
+{
+template<typename Number>
+__global__ void
+invert_diagonal(Number * v, const dealii::types::global_dof_index N)
+{
+  const auto idx_base = threadIdx.x + blockIdx.x * (blockDim.x * CHUNKSIZE_ELEMWISE_OP);
+
+  for(int c = 0; c < CHUNKSIZE_ELEMWISE_OP; ++c)
+  {
+    const auto idx = idx_base + c * BKSIZE_ELEMWISE_OP;
+    if(idx < N)
+      v[idx] = (abs(v[idx]) < 1e-10) ? 1.0 : 1.0 / v[idx];
+  }
+}
+} // namespace internal
+
+
 template<int dim, typename Number, int n_components = 1>
 class LaplaceOperator
 {
@@ -156,7 +177,10 @@ private:
 
   typedef dealii::LinearAlgebra::distributed::Vector<Number, dealii::MemorySpace::CUDA> VectorType;
 
+
 public:
+  typedef Number value_type;
+
   LaplaceOperator()
     : matrix_free(nullptr),
       time(0.0),
@@ -228,19 +252,22 @@ public:
   unsigned int
   get_dof_index() const
   {
-    return this->data.dof_index;
+    // return this->data.dof_index;
+    return 0;
   }
 
   unsigned int
   get_quad_index() const
   {
-    return this->data.quad_index;
+    // return this->data.quad_index;
+    return 0;
   }
 
   bool
   operator_is_singular() const
   {
-    return this->data.operator_is_singular;
+    // return this->data.operator_is_singular;
+    return false;
   }
 
   void
@@ -280,9 +307,9 @@ public:
   dealii::types::global_dof_index
   n() const
   {
-    unsigned int dof_index = get_dof_index();
+    // unsigned int dof_index = get_dof_index();
 
-    return this->matrix_free->get_vector_partitioner(dof_index)->size();
+    return this->matrix_free->get_vector_partitioner()->size();
   }
 
   Number
@@ -406,6 +433,28 @@ public:
   }
 
   void
+  calculate_inverse_diagonal(VectorType & diagonal) const
+  {
+    calculate_diagonal(diagonal);
+
+    invert_diagonal(diagonal);
+  }
+
+  void
+  invert_diagonal(VectorType & diagonal) const
+  {
+    if(diagonal.locally_owned_size() == 0)
+      return;
+
+    const auto nblocks =
+      1 + (diagonal.locally_owned_size() - 1) / (CHUNKSIZE_ELEMWISE_OP * BKSIZE_ELEMWISE_OP);
+    internal::invert_diagonal<typename VectorType::value_type>
+      <<<nblocks, BKSIZE_ELEMWISE_OP>>>(diagonal.get_values(), diagonal.locally_owned_size());
+
+    AssertCudaKernel();
+  }
+
+  void
   calculate_diagonal(VectorType & diagonal) const
   {
     if(diagonal.size() == 0)
@@ -419,8 +468,37 @@ public:
   {
     if(is_dg && evaluate_face_integrals())
     {
-      AssertThrow(false, dealii::ExcMessage("TODO: DG Laplace Operator."));
+      switch(fe_degree)
+      {
+          // clang-format off
+        case  1: do_add_diagonal<1>(diagonal); break;
+        case  2: do_add_diagonal<2>(diagonal); break;
+        case  3: do_add_diagonal<3>(diagonal); break;
+        case  4: do_add_diagonal<4>(diagonal); break;
+        case  5: do_add_diagonal<5>(diagonal); break;
+        case  6: do_add_diagonal<6>(diagonal); break;
+        case  7: do_add_diagonal<7>(diagonal); break;
+        case  8: do_add_diagonal<8>(diagonal); break;
+        case  9: do_add_diagonal<9>(diagonal); break;
+        case 10: do_add_diagonal<10>(diagonal); break;
+        default:
+          AssertThrow(false, dealii::ExcNotImplemented("Only degrees 1 through 10 implemented."));
+          // clang-format on
+      }
     }
+    else
+    {
+    }
+  }
+
+  template<int fe_degree>
+  void
+  do_add_diagonal(VectorType & diagonal) const
+  {
+    VectorType tmp(diagonal.get_partitioner());
+
+    LocalCellFaceOperatorDiag<fe_degree> laplace_diag_op;
+    matrix_free->cell_loop(laplace_diag_op, tmp, diagonal);
   }
 
   bool
@@ -614,6 +692,144 @@ public:
     }
   };
 
+
+  template<int fe_degree>
+  class LocalCellFaceOperatorDiag
+  {
+  public:
+    static const unsigned int n_dofs_1d    = fe_degree + 1;
+    static const unsigned int n_local_dofs = dealii::Utilities::pow(fe_degree + 1, dim) * 2;
+    static const unsigned int n_q_points   = dealii::Utilities::pow(fe_degree + 1, dim) * 2;
+    static const unsigned int shared_mem =
+      (n_local_dofs * (dim + 1) + 9 * n_dofs_1d * n_dofs_1d) * sizeof(Number);
+
+    static const unsigned int cells_per_block =
+      1; // TODO: CUDAWrappers::cells_per_block_shmem(dim, fe_degree);
+
+    static const unsigned int n_dofs_z = dim == 3 ? fe_degree + 1 : 1;
+
+    using value_type = cuda::std::array<Number, n_dofs_z>;
+
+    double const PENALTY_FACTOR = 1.0 * (fe_degree + 1) * (fe_degree + 1);
+
+    OperatorType const operator_type;
+
+    LocalCellFaceOperatorDiag(const OperatorType operator_type = OperatorType::homogeneous)
+      : operator_type(operator_type)
+    {
+    }
+
+    __device__ void
+    operator()(const unsigned int                                                  cell,
+               const typename ExaDG::CUDAWrappers::MatrixFree<dim, Number>::Data * gpu_data,
+               ExaDG::CUDAWrappers::SharedData<dim, Number> *                      shared_data,
+               const Number *                                                      src,
+               Number *                                                            dst) const
+    {
+      ExaDG::CUDAWrappers::FEEvaluation<dim, fe_degree, fe_degree + 1, 1, Number> fe_eval(
+        cell, gpu_data, shared_data);
+
+      value_type my_diagonal;
+
+      const auto tid = ExaDG::CUDAWrappers::compute_index<dim, n_dofs_1d>();
+      for(unsigned int z = 0; z < n_dofs_z; ++z)
+        for(unsigned int i = 0; i < n_local_dofs / n_dofs_z / 2; ++i)
+        {
+          value_type diag = {};
+          diag[z]         = i == tid ? 1.0 : 0.0;
+          fe_eval.submit_dof_value(diag);
+          fe_eval.evaluate(false, true);
+          fe_eval.submit_gradient(fe_eval.get_gradient());
+          fe_eval.integrate(false, true);
+          auto out = fe_eval.get_value();
+          if(tid == i)
+            my_diagonal[z] = out[z];
+        }
+
+
+      for(int f = 0; f < dim * 2; ++f)
+      {
+        auto face0 = gpu_data->cell2face_id[cell * dim * 2 * 2 + 2 * f];
+        auto face1 = gpu_data->cell2face_id[cell * dim * 2 * 2 + 2 * f + 1];
+
+        if(face0 + face1 == 0)
+          continue;
+
+        value_type my_diagonal1;
+
+        Number coe = 1.;
+        if(face0 == face1 &&
+           gpu_data->boundary_id[face0 - gpu_data->n_inner_faces] == 0) // Dirichlet
+          coe = 2.;
+
+        ExaDG::CUDAWrappers::FEFaceEvaluation<dim, fe_degree, fe_degree + 1, 1, Number> phi_inner(
+          face0, gpu_data, shared_data, true);
+        ExaDG::CUDAWrappers::FEFaceEvaluation<dim, fe_degree, fe_degree + 1, 1, Number> phi_outer(
+          face1, gpu_data, shared_data, false);
+
+        auto hi    = 0.5 * (fabs(phi_inner.inverse_length_normal_to_face()) +
+                         fabs(phi_outer.inverse_length_normal_to_face()));
+        auto sigma = hi * PENALTY_FACTOR;
+
+        for(unsigned int z = 0; z < n_dofs_z; ++z)
+          for(unsigned int i = 0; i < n_local_dofs / n_dofs_z / 2; ++i)
+          {
+            value_type diag = {};
+            diag[z]         = i == tid ? 1.0 : 0.0;
+
+            phi_inner.submit_dof_value(diag);
+            phi_inner.evaluate(true, true);
+
+            auto solution_jump             = phi_inner.get_value();
+            auto average_normal_derivative = phi_inner.get_normal_derivative();
+            auto test_by_value =
+              solution_jump * sigma * coe - average_normal_derivative * 0.5 * coe;
+
+            phi_inner.submit_value(test_by_value);
+            phi_inner.submit_normal_derivative(solution_jump * -0.5 * coe);
+
+            phi_inner.integrate(true, true);
+
+            auto out = phi_inner.get_value();
+            if(tid == i)
+              my_diagonal[z] += out[z];
+          }
+
+        if(face0 == face1)
+          continue;
+
+        for(unsigned int z = 0; z < n_dofs_z; ++z)
+          for(unsigned int i = 0; i < n_local_dofs / n_dofs_z / 2; ++i)
+          {
+            value_type diag = {};
+            diag[z]         = i == tid ? 1.0 : 0.0;
+
+            phi_outer.submit_dof_value(diag);
+            phi_outer.evaluate(true, true);
+
+            auto solution_jump             = phi_outer.get_value();
+            auto average_normal_derivative = phi_outer.get_normal_derivative();
+            auto test_by_value =
+              average_normal_derivative * 0.5 * coe + solution_jump * sigma * coe;
+
+            phi_outer.submit_value(test_by_value);
+            phi_outer.submit_normal_derivative(solution_jump * 0.5 * coe);
+
+            phi_outer.integrate(true, true);
+
+            auto out = phi_outer.get_value();
+            if(tid == i)
+              my_diagonal1[z] = out[z];
+          }
+
+        phi_outer.submit_dof_value(my_diagonal1);
+        phi_outer.distribute_local_to_global(dst);
+      }
+
+      fe_eval.submit_dof_value(my_diagonal);
+      fe_eval.distribute_local_to_global(dst);
+    }
+  };
 
 
 private:

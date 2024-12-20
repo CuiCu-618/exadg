@@ -162,8 +162,9 @@ private:
     this->param.solver_data.max_iter        = 1e4;
     this->param.compute_performance_metrics = true;
     this->param.preconditioner              = Preconditioner::Multigrid;
-    this->param.multigrid_data.type         = MultigridType::cphMG;
+    this->param.multigrid_data.type         = MultigridType::hMG;
     this->param.multigrid_data.p_sequence   = PSequenceType::Bisect;
+
     // MG smoother
     this->param.multigrid_data.smoother_data.smoother        = MultigridSmoother::Chebyshev;
     this->param.multigrid_data.smoother_data.iterations      = 5;
@@ -171,7 +172,7 @@ private:
     // MG coarse grid solver
     this->param.multigrid_data.coarse_problem.solver = MultigridCoarseGridSolver::CG;
     this->param.multigrid_data.coarse_problem.preconditioner =
-      MultigridCoarseGridPreconditioner::AMG;
+      MultigridCoarseGridPreconditioner::None;
     this->param.multigrid_data.coarse_problem.solver_data.rel_tol = 1.e-3;
   }
 

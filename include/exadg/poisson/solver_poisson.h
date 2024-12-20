@@ -23,8 +23,10 @@
 #define INCLUDE_EXADG_POISSON_SOLVER_POISSON_H_
 
 // ExaDG
+#include <exadg/matrix_free/cuda_matrix_free.h>
 #include <exadg/matrix_free/matrix_free_data.h>
 #include <exadg/poisson/overset_grids/user_interface/application_base.h>
+#include <exadg/poisson/spatial_discretization/cuda_operator.h>
 #include <exadg/poisson/spatial_discretization/operator.h>
 
 namespace ExaDG
@@ -48,8 +50,17 @@ public:
                                                             "Poisson",
                                                             mpi_comm);
 
+    pde_operator_device = std::make_shared<CUDAWrappers::Operator<dim, n_components, Number>>(
+      application->get_grid(),
+      application->get_boundary_descriptor(),
+      application->get_field_functions(),
+      application->get_parameters(),
+      "Poisson_device",
+      mpi_comm);
+
     matrix_free_data = std::make_shared<MatrixFreeData<dim, Number>>();
     matrix_free_data->append(pde_operator);
+    matrix_free_data->append(pde_operator_device);
 
     matrix_free = std::make_shared<dealii::MatrixFree<dim, Number>>();
     if(application->get_parameters().enable_cell_based_face_loops)
@@ -61,11 +72,22 @@ public:
                         matrix_free_data->get_quadrature_vector(),
                         matrix_free_data->data);
 
+    // matrix_free_data->data.overlap_communication_computation = false;
+    cuda_matrix_free = std::make_shared<ExaDG::CUDAWrappers::MatrixFree<dim, Number>>();
+    cuda_matrix_free->reinit(*application->get_grid()->mapping,
+                             *matrix_free_data->get_dof_handler_vector()[0],
+                             *matrix_free_data->get_constraint_vector()[0],
+                             matrix_free_data->get_quadrature_vector()[0],
+                             matrix_free_data->data);
+
     pde_operator->setup(matrix_free, matrix_free_data);
+
+    pde_operator_device->setup(cuda_matrix_free, matrix_free_data);
 
     if(not(is_throughput_study))
     {
       pde_operator->setup_solver();
+      pde_operator_device->setup_solver();
 
       postprocessor = application->create_postprocessor();
       postprocessor->setup(pde_operator->get_dof_handler(), *application->get_grid()->mapping);
@@ -75,9 +97,13 @@ public:
   std::shared_ptr<Operator<dim, n_components, Number>> pde_operator;
   std::shared_ptr<PostProcessorBase<dim, Number>>      postprocessor;
 
+  std::shared_ptr<CUDAWrappers::Operator<dim, n_components, Number>> pde_operator_device;
+
 private:
   std::shared_ptr<dealii::MatrixFree<dim, Number>> matrix_free;
   std::shared_ptr<MatrixFreeData<dim, Number>>     matrix_free_data;
+
+  std::shared_ptr<ExaDG::CUDAWrappers::MatrixFree<dim, Number>> cuda_matrix_free;
 };
 
 } // namespace Poisson

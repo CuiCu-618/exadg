@@ -97,6 +97,7 @@ Driver<dim, Number>::solve()
   timer.restart();
   iterations = poisson->pde_operator->solve(sol, rhs, 0.0 /* time */);
   solve_time += timer.wall_time();
+  std::cout << "Host: " << iterations << " " << timer.wall_time() << " s\n";
 
   // postprocessing of results
   timer.restart();
@@ -105,12 +106,62 @@ Driver<dim, Number>::solve()
 }
 
 template<int dim, typename Number>
+void
+Driver<dim, Number>::solve_device()
+{
+  // initialization of vectors
+  dealii::Timer timer;
+  timer.restart();
+  dealii::LinearAlgebra::distributed::Vector<Number, dealii::MemorySpace::CUDA> rhs;
+  dealii::LinearAlgebra::distributed::Vector<Number, dealii::MemorySpace::CUDA> sol;
+  poisson->pde_operator_device->initialize_dof_vector(rhs);
+  poisson->pde_operator_device->initialize_dof_vector(sol);
+  poisson->pde_operator_device->prescribe_initial_conditions(sol);
+  timer_tree.insert({"Poisson", "Vector init device"}, timer.wall_time());
+
+  // postprocessing of results
+  timer.restart();
+
+  // TODO:
+  dealii::LinearAlgebra::ReadWriteVector<Number> rw_vector(sol.size());
+  dealii::LinearAlgebra::distributed::Vector<Number, dealii::MemorySpace::Host> sol_host(
+    sol.size());
+  rw_vector.import(sol, dealii::VectorOperation::insert);
+  sol_host.import(rw_vector, dealii::VectorOperation::insert);
+
+  poisson->postprocessor->do_postprocessing(sol_host);
+  timer_tree.insert({"Poisson", "Postprocessing device"}, timer.wall_time());
+
+  // calculate right-hand side
+  timer.restart();
+  poisson->pde_operator_device->rhs(rhs);
+  timer_tree.insert({"Poisson", "Right-hand side device"}, timer.wall_time());
+
+  // solve linear system of equations
+  timer.restart();
+  iterations = poisson->pde_operator_device->solve(sol, rhs, 0.0 /* time */);
+  solve_time += timer.wall_time();
+  std::cout << "Device: " << iterations << " " << timer.wall_time() << " s\n";
+
+  // postprocessing of results
+  timer.restart();
+
+  rw_vector.import(sol, dealii::VectorOperation::insert);
+  sol_host.import(rw_vector, dealii::VectorOperation::insert);
+
+  poisson->postprocessor->do_postprocessing(sol_host);
+  timer_tree.insert({"Poisson", "Postprocessing device"}, timer.wall_time());
+}
+
+template<int dim, typename Number>
 SolverResult
 Driver<dim, Number>::print_performance_results(double const total_time) const
 {
-  double const n_10 = poisson->pde_operator->get_n10();
+  // double const n_10 = poisson->pde_operator->get_n10();
+  double const n_10 = poisson->pde_operator_device->get_n10();
 
-  dealii::types::global_dof_index const DoFs = poisson->pde_operator->get_number_of_dofs();
+  // dealii::types::global_dof_index const DoFs = poisson->pde_operator->get_number_of_dofs();
+  dealii::types::global_dof_index const DoFs = poisson->pde_operator_device->get_number_of_dofs();
 
   unsigned int const N_mpi_processes = dealii::Utilities::MPI::n_mpi_processes(mpi_comm);
 
@@ -131,13 +182,15 @@ Driver<dim, Number>::print_performance_results(double const total_time) const
                 << "  Iterations n_10      = " << std::fixed << std::setprecision(1) << n_10
                 << std::endl
                 << "  Convergence rate rho = " << std::fixed << std::setprecision(4)
-                << poisson->pde_operator->get_average_convergence_rate() << std::endl;
+                << poisson->pde_operator_device->get_average_convergence_rate() << std::endl;
+    // << poisson->pde_operator->get_average_convergence_rate() << std::endl;
 
     // wall times
     timer_tree.insert({"Poisson"}, total_time);
 
     // insert sub-tree for Krylov solver
-    timer_tree.insert({"Poisson"}, poisson->pde_operator->get_timings());
+    timer_tree.insert({"Poisson"}, poisson->pde_operator_device->get_timings());
+    // timer_tree.insert({"Poisson"}, poisson->pde_operator->get_timings());
 
     pcout << std::endl << "Timings for level 1:" << std::endl;
     timer_tree.print_level(pcout, 1);
@@ -202,7 +255,8 @@ Driver<dim, Number>::apply_operator(std::string const & operator_type_string,
 #endif
   }
 
-  const std::function<void(void)> operator_evaluation = [&](void) {
+  const std::function<void(void)> operator_evaluation = [&](void)
+  {
     if(operator_type == OperatorType::MatrixFree)
     {
       poisson->pde_operator->vmult(dst, src);
