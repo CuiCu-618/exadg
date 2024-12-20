@@ -84,6 +84,15 @@ calculate_penalty_parameter(
       }
 
       array_penalty_parameter[i][v] = surface_area / volume;
+
+      Number surface_area_tmp = 0;
+      for(unsigned int q = 0; q < face_quadrature.size(); ++q)
+      {
+        surface_area_tmp += fe_face_values.JxW(q);
+        // std::cout << i << " " << surface_area << " " << volume << "\n";
+      }
+
+      array_penalty_parameter[i][v] = surface_area_tmp / volume;
     }
   }
 }
